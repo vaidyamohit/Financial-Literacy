@@ -6,4 +6,4 @@ torch
 transformers
 sentencepiece  # Required for tokenizer
 bitsandbytes   # Enables 4-bit model loading
-openai         # Optional, for API fallback
+openai         # Required for OpenAI fallback
