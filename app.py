@@ -1,16 +1,15 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json
-import torch  # Ensure PyTorch is installed
-from transformers import pipeline
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
 # ---- SETUP ----
-st.set_page_config(page_title="AI Financial Assistant", layout="wide")
-st.title("💰 AI Financial Literacy Assistant")
-st.write("🚀 Ask me about budgeting, savings, or fraud detection!")
+st.set_page_config(page_title="AI Financial Advisor", layout="wide")
+st.title("💰 AI Financial Advisor - Investment & Budgeting Chatbot")
+st.write("🚀 Ask me about budgeting, investments, stock market, or fraud detection!")
 
 # ---- USER PROFILE SETUP ----
 st.sidebar.header("User Profile")
@@ -33,56 +32,65 @@ actual_savings = income - total_expense
 st.sidebar.markdown(f"💰 **Total Monthly Expenses:** ₹{total_expense}")
 st.sidebar.markdown(f"📈 **Actual Savings:** ₹{actual_savings} (Goal: ₹{savings_goal})")
 
-# ---- CHATBOT FUNCTIONALITY ----
-st.subheader("💬 Chat with AI Financial Assistant")
-user_input = st.text_input("Ask me anything about finance:")
+# ---- LLM-POWERED CHATBOT ----
+st.subheader("💬 AI Financial Chatbot")
+st.write("Ask me anything about **investments, stock market, budgeting, or savings!**")
 
-# Load NLP model for financial Q&A
-if torch.cuda.is_available():
-    device = "cuda"
+# Load Mistral-7B model (or change to Llama-2)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+@st.cache_resource
+def load_llm():
+    model_name = "mistralai/Mistral-7B-Instruct"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+    return pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device == "cuda" else -1)
+
+llm = load_llm()
+
+# Chat History
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+user_query = st.chat_input("Ask me about stocks, crypto, real estate, or budget planning!")
+
+if user_query:
+    st.session_state.messages.append({"role": "user", "content": user_query})
+    
+    # Generate LLM response
+    llm_response = llm(user_query, max_new_tokens=100)[0]["generated_text"]
+    
+    st.session_state.messages.append({"role": "assistant", "content": llm_response})
+    
+    with st.chat_message("assistant"):
+        st.markdown(llm_response)
+
+# ---- INVESTMENT RECOMMENDATIONS ----
+st.subheader("📊 Investment Suggestions")
+st.write("💡 **Based on your profile, here are personalized investment options:**")
+
+if actual_savings > 0:
+    st.success("✅ You have positive savings! Here’s where you could invest:")
+    
+    if actual_savings > income * 0.2:
+        st.write("💼 **Stock Market:** Consider investing in blue-chip stocks or index funds.")
+        st.write("🏠 **Real Estate:** If you can afford it, consider a real estate investment.")
+    
+    if actual_savings > income * 0.1:
+        st.write("📈 **Mutual Funds:** A good option for diversification.")
+    
+    st.write("💳 **Fixed Deposits & Bonds:** Secure, lower-risk investments.")
 else:
-    device = "cpu"
-
-qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad", device=0 if device == "cuda" else -1)
-
-faq_data = {
-    "What is a credit score?": "A credit score is a number that evaluates a consumer's creditworthiness.",
-    "How do I save more money?": "Try following the 50/30/20 rule: 50% for needs, 30% for wants, 20% for savings.",
-    "What is an emergency fund?": "An emergency fund is savings that cover 3-6 months of living expenses in case of job loss or unexpected costs."
-}
-
-def chatbot_response(query):
-    query_lower = query.lower()
-    for question, answer in faq_data.items():
-        if question.lower() in query_lower:
-            return answer
-
-    context = "Credit scores are used to assess a borrower's creditworthiness. A good score can help get lower interest rates."
-    response = qa_model(question=query, context=context)
-    return response["answer"] if response else "I’m not sure, but I can learn!"
-
-if user_input:
-    response = chatbot_response(user_input)
-    st.markdown(f"**AI Assistant:** {response}")
-
-# ---- BUDGET ANALYSIS & RECOMMENDATIONS ----
-st.subheader("📊 Budget Analysis & Recommendations")
-st.write("Here's how your spending compares to financial best practices:")
-
-ideal_needs = 0.5 * income
-ideal_wants = 0.3 * income
-ideal_savings = 0.2 * income
-
-st.markdown(f"💡 **Ideal Savings Goal:** ₹{ideal_savings}")
-st.markdown(f"📊 **Your Savings:** ₹{actual_savings}")
-
-if actual_savings < savings_goal:
-    st.warning("⚠️ You are not meeting your savings goal. Consider reducing discretionary expenses.")
+    st.error("⚠️ Your expenses exceed your income. Focus on saving before investing.")
 
 # ---- FRAUD DETECTION MODULE ----
 st.subheader("🛑 Fraud Detection System")
 
-fraud_data = [50, 20, 15, 30, 1500, 80, 100, 5000]  # Example past transactions
+fraud_data = [50, 20, 15, 30, 1500, 80, 100, 5000]
 scaler = StandardScaler()
 scaled_data = scaler.fit_transform(np.array(fraud_data).reshape(-1, 1))
 
@@ -104,7 +112,7 @@ if st.button("🔍 Run Fraud Check"):
     for result in fraud_results:
         st.warning(result)
 
-st.write("This system analyzes transactions and detects anomalies based on spending patterns.")
+st.write("This system detects anomalies in your transactions.")
 
 # ---- DATA VISUALIZATION ----
 st.subheader("📉 Expense Breakdown")
