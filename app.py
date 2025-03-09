@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import json
+import torch  # Ensure PyTorch is installed
 from transformers import pipeline
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
@@ -37,7 +38,12 @@ st.subheader("💬 Chat with AI Financial Assistant")
 user_input = st.text_input("Ask me anything about finance:")
 
 # Load NLP model for financial Q&A
-qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad")
+if torch.cuda.is_available():
+    device = "cuda"
+else:
+    device = "cpu"
+
+qa_model = pipeline("question-answering", model="distilbert-base-cased-distilled-squad", device=0 if device == "cuda" else -1)
 
 faq_data = {
     "What is a credit score?": "A credit score is a number that evaluates a consumer's creditworthiness.",
