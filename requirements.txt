@@ -2,6 +2,8 @@ streamlit
 pandas
 numpy
 scikit-learn
+torch
 transformers
-torch  # Required for NLP chatbot
 sentencepiece  # Required for tokenizer
+bitsandbytes   # Enables 4-bit model loading
+openai         # Optional, for API fallback
