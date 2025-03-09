@@ -4,6 +4,6 @@ numpy
 scikit-learn
 torch
 transformers
-sentencepiece  # Required for tokenizer
-bitsandbytes   # Enables 4-bit model loading
-openai         # Required for OpenAI fallback
+sentencepiece
+bitsandbytes
+openai
