@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
+import openai  # API fallback
 
 # ---- SETUP ----
 st.set_page_config(page_title="AI Financial Advisor", layout="wide")
@@ -36,21 +37,43 @@ st.sidebar.markdown(f"📈 **Actual Savings:** ₹{actual_savings} (Goal: ₹{sa
 st.subheader("💬 AI Financial Chatbot")
 st.write("Ask me anything about **investments, stock market, budgeting, or savings!**")
 
-# Load Lightweight LLM (with Error Handling)
+# Check for CUDA (GPU) or use CPU
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @st.cache_resource
 def load_llm():
     try:
-        model_name = "mistralai/Mistral-7B-Instruct-v0.1"  # Smaller & Optimized Model
+        model_name = "mistralai/Mistral-7B-v0.1"  # Smaller version
+
+        # Enable 4-bit loading for lower RAM usage
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16
+        )
+
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto", quantization_config=quant_config
+        )
+
         return pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device == "cuda" else -1)
     except Exception as e:
         st.error("⚠️ Unable to load the local LLM. Switching to OpenAI API...")
         return None
 
 llm = load_llm()
+
+# OpenAI API Key (Fallback)
+openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your OpenAI API Key
+
+def openai_fallback(query):
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": "You are a financial advisor."},
+                  {"role": "user", "content": query}]
+    )
+    return response["choices"][0]["message"]["content"]
 
 # Chat History
 if "messages" not in st.session_state:
@@ -68,7 +91,7 @@ if user_query:
     if llm:
         llm_response = llm(user_query, max_new_tokens=100)[0]["generated_text"]
     else:
-        llm_response = "I'm sorry, but I couldn't load the AI model. Try a different question."
+        llm_response = openai_fallback(user_query)  # Use OpenAI API if local LLM fails
 
     st.session_state.messages.append({"role": "assistant", "content": llm_response})
 
