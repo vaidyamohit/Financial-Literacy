@@ -4,3 +4,4 @@ numpy
 scikit-learn
 transformers
 torch  # Required for NLP chatbot
+sentencepiece  # Required for tokenizer
