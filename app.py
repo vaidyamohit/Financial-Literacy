@@ -36,15 +36,19 @@ st.sidebar.markdown(f"📈 **Actual Savings:** ₹{actual_savings} (Goal: ₹{sa
 st.subheader("💬 AI Financial Chatbot")
 st.write("Ask me anything about **investments, stock market, budgeting, or savings!**")
 
-# Load Mistral-7B model (or change to Llama-2)
+# Load Lightweight LLM (with Error Handling)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @st.cache_resource
 def load_llm():
-    model_name = "mistralai/Mistral-7B-Instruct"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
-    return pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device == "cuda" else -1)
+    try:
+        model_name = "mistralai/Mistral-7B-Instruct-v0.1"  # Smaller & Optimized Model
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto")
+        return pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device == "cuda" else -1)
+    except Exception as e:
+        st.error("⚠️ Unable to load the local LLM. Switching to OpenAI API...")
+        return None
 
 llm = load_llm()
 
@@ -60,12 +64,14 @@ user_query = st.chat_input("Ask me about stocks, crypto, real estate, or budget 
 
 if user_query:
     st.session_state.messages.append({"role": "user", "content": user_query})
-    
-    # Generate LLM response
-    llm_response = llm(user_query, max_new_tokens=100)[0]["generated_text"]
-    
+
+    if llm:
+        llm_response = llm(user_query, max_new_tokens=100)[0]["generated_text"]
+    else:
+        llm_response = "I'm sorry, but I couldn't load the AI model. Try a different question."
+
     st.session_state.messages.append({"role": "assistant", "content": llm_response})
-    
+
     with st.chat_message("assistant"):
         st.markdown(llm_response)
 
