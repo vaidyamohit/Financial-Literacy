@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import ollama  # Ollama for local chatbot
+import openai  # OpenAI fallback
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
@@ -38,21 +39,35 @@ selected_option = st.radio(
     index=0
 )
 
-# ---- OLLAMA-POWERED CHATBOT ----
+# ---- CHATBOT (OLLAMA + OPENAI FALLBACK) ----
 if selected_option == "AI Financial Chatbot":
     st.subheader("💬 AI Financial Chatbot")
     st.write("Ask me anything about **investments, stock market, budgeting, or savings!**")
 
-    @st.cache_resource
-    def load_ollama():
-        """Loads the Ollama model (Mistral-7B)."""
+    def ask_ollama(query):
+        """Try querying the Ollama chatbot."""
         try:
-            return ollama.ChatCompletion.create(model="mistral", messages=[])
-        except Exception as e:
-            st.error("⚠️ Failed to load Ollama chatbot.")
+            response = ollama.chat(
+                model="mistral",
+                messages=[{"role": "system", "content": "You are a financial advisor."},
+                          {"role": "user", "content": query}]
+            )
+            return response["message"]["content"]
+        except Exception:
             return None
 
-    chatbot = load_ollama()
+    def ask_openai(query):
+        """Fallback to OpenAI if Ollama fails."""
+        try:
+            openai.api_key = "YOUR_OPENAI_API_KEY"  # Replace with your OpenAI API Key
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "system", "content": "You are a financial advisor."},
+                          {"role": "user", "content": query}]
+            )
+            return response["choices"][0]["message"]["content"]
+        except Exception:
+            return "⚠️ Unable to fetch a response from both Ollama and OpenAI."
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -66,20 +81,15 @@ if selected_option == "AI Financial Chatbot":
     if user_query:
         st.session_state.messages.append({"role": "user", "content": user_query})
 
-        if chatbot:
-            response = ollama.ChatCompletion.create(
-                model="mistral",
-                messages=[{"role": "system", "content": "You are a financial advisor."},
-                          {"role": "user", "content": user_query}]
-            )
-            llm_response = response["message"]["content"]
-        else:
-            llm_response = "⚠️ Sorry, the chatbot is unavailable. Try again later."
+        response = ask_ollama(user_query)  # Try Ollama first
+        if response is None:
+            st.error("⚠️ Ollama failed. Switching to OpenAI GPT-4.")
+            response = ask_openai(user_query)  # Use OpenAI if Ollama fails
 
-        st.session_state.messages.append({"role": "assistant", "content": llm_response})
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
         with st.chat_message("assistant"):
-            st.markdown(llm_response)
+            st.markdown(response)
 
 # ---- INVESTMENT SUGGESTIONS ----
 elif selected_option == "Investment Suggestions":
@@ -103,7 +113,7 @@ elif selected_option == "Investment Suggestions":
 # ---- FRAUD DETECTION SYSTEM ----
 elif selected_option == "Fraud Detection System":
     st.subheader("🛑 Fraud Detection System")
-    
+
     fraud_data = [50, 20, 15, 30, 1500, 80, 100, 5000]
     scaler = StandardScaler()
     scaled_data = scaler.fit_transform(np.array(fraud_data).reshape(-1, 1))
@@ -135,13 +145,13 @@ elif selected_option == "Expense Breakdown":
 # ---- FINANCIAL HEALTH CHECK ----
 elif selected_option == "Financial Health Check":
     st.subheader("📊 Financial Health Check")
-    
+
     st.write("💡 **Suggestions to improve your financial health:**")
     if actual_savings < savings_goal:
         st.warning("⚠️ You are not meeting your savings goal. Reduce unnecessary expenses.")
-    
+
     if total_expense > income:
         st.error("⚠️ Your expenses exceed your income. Reduce spending or find additional income sources.")
-    
+
     if actual_savings > 0.2 * income:
         st.success("✅ You are saving more than 20% of your income. Keep it up!")
