@@ -1,11 +1,9 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, BitsAndBytesConfig
+import ollama  # Ollama for local chatbot
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
-import openai  # API fallback
 
 # ---- SETUP ----
 st.set_page_config(page_title="AI Financial Advisor", layout="wide")
@@ -40,43 +38,21 @@ selected_option = st.radio(
     index=0
 )
 
-# ---- LLM-POWERED CHATBOT ----
+# ---- OLLAMA-POWERED CHATBOT ----
 if selected_option == "AI Financial Chatbot":
     st.subheader("💬 AI Financial Chatbot")
     st.write("Ask me anything about **investments, stock market, budgeting, or savings!**")
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
     @st.cache_resource
-    def load_llm():
+    def load_ollama():
+        """Loads the Ollama model (Mistral-7B)."""
         try:
-            model_name = "mistralai/Mistral-7B-v0.1"
-            quant_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16
-            )
-
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModelForCausalLM.from_pretrained(
-                model_name, device_map="auto", quantization_config=quant_config
-            )
-
-            return pipeline("text-generation", model=model, tokenizer=tokenizer, device=0 if device == "cuda" else -1)
-        except Exception:
-            st.error("⚠️ Unable to load the local LLM. Switching to OpenAI API...")
+            return ollama.ChatCompletion.create(model="mistral", messages=[])
+        except Exception as e:
+            st.error("⚠️ Failed to load Ollama chatbot.")
             return None
 
-    llm = load_llm()
-    openai.api_key = "YOUR_OPENAI_API_KEY"  
-
-    def openai_fallback(query):
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "system", "content": "You are a financial advisor."},
-                      {"role": "user", "content": query}]
-        )
-        return response["choices"][0]["message"]["content"]
+    chatbot = load_ollama()
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -90,10 +66,15 @@ if selected_option == "AI Financial Chatbot":
     if user_query:
         st.session_state.messages.append({"role": "user", "content": user_query})
 
-        if llm:
-            llm_response = llm(user_query, max_new_tokens=100)[0]["generated_text"]
+        if chatbot:
+            response = ollama.ChatCompletion.create(
+                model="mistral",
+                messages=[{"role": "system", "content": "You are a financial advisor."},
+                          {"role": "user", "content": user_query}]
+            )
+            llm_response = response["message"]["content"]
         else:
-            llm_response = openai_fallback(user_query)
+            llm_response = "⚠️ Sorry, the chatbot is unavailable. Try again later."
 
         st.session_state.messages.append({"role": "assistant", "content": llm_response})
 
@@ -164,4 +145,3 @@ elif selected_option == "Financial Health Check":
     
     if actual_savings > 0.2 * income:
         st.success("✅ You are saving more than 20% of your income. Keep it up!")
-
